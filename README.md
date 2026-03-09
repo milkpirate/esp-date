@@ -19,7 +19,7 @@ ESPDate is a tiny C++17 helper for ESP32 projects that makes working with dates 
 - **Sunrise / sunset**: compute daily sun times from lat/lon using numeric offsets or POSIX TZ strings (auto-DST aware).
 - **DST detection**: `isDstActive` reports whether daylight saving time applies using the stored TZ, an explicit POSIX TZ string, or the current system TZ.
 - **Moon phase**: `moonPhase` returns the current lunar phase angle and illumination fraction for any moment.
-- **Optional NTP bootstrap**: call `init` with `ESPDateConfig` containing both `timeZone` and `ntpServer` to set TZ and start SNTP after Arduino/WiFi is ready.
+- **Optional NTP bootstrap**: call `init` with `ESPDateConfig` containing `timeZone` and at least one NTP server (`ntpServer`, optional `ntpServer2`/`ntpServer3`) to set TZ and start SNTP after Arduino/WiFi is ready.
 - **NTP sync callback + manual re-sync**: register `setNtpSyncCallback(...)` with a function, lambda, or `std::bind`, call `syncNTP()` anytime to trigger an immediate refresh, and optionally override SNTP interval via `ntpSyncIntervalMs` / `setNtpSyncIntervalMs(...)`.
 - **Optional PSRAM-backed config/state buffers**: `ESPDateConfig::usePSRAMBuffers` routes ESPDate-owned text state (timezone/NTP/scoped TZ restore buffers) through `ESPBufferManager` with automatic fallback.
 - **Explicit lifecycle cleanup**: `deinit()` unregisters ESPDate-owned SNTP callback hooks, clears runtime config buffers, and is safe to call repeatedly; the destructor calls it automatically.
@@ -31,8 +31,8 @@ ESPDate is a tiny C++17 helper for ESP32 projects that makes working with dates 
 - **Class-based API**: everything hangs off a single `ESPDate` instance; no global namespace clutter.
 - **Lightweight & portable**: C++17, header-first public API; relies only on standard C time functions and the system clock (`time()`).
 
-ESPDate does not configure SNTP by default. Call `init` with a POSIX TZ string plus an `ntpServer` to have ESPDate call `configTzTime` for you—do this after the Arduino runtime and WiFi are up to avoid early watchdog resets. Otherwise you remain in control of time-zone setup and system clock sync.
-`syncNTP()` returns `true` only when an NTP server is configured and the runtime supports `configTzTime`.
+ESPDate does not configure SNTP by default. Call `init` with a POSIX TZ string plus at least one NTP server (`ntpServer`, optional `ntpServer2`/`ntpServer3`) to have ESPDate call `configTzTime` for you. Do this after the Arduino runtime and WiFi are up to avoid early watchdog resets. Otherwise you remain in control of time-zone setup and system clock sync.
+`syncNTP()` returns `true` only when one or more NTP servers are configured and the runtime supports `configTzTime`.
 SNTP exposes a system-level sync hook, so the last `setNtpSyncCallback(...)` registration is the active callback.
 For the same reason, `lastNtpSync()` is tracked on the currently active `ESPDate` instance.
 Example member-method binding style:
@@ -63,9 +63,12 @@ void setup() {
 
     // Configure TZ + NTP after WiFi is connected if you want ESPDate to call configTzTime
     ESPDateConfig dateCfg{0.0f, 0.0f, "CET-1CEST,M3.5.0/2,M10.5.0/3", "pool.ntp.org", 15 * 60 * 1000};
+    dateCfg.ntpServer2 = "time.google.com";
+    dateCfg.ntpServer3 = "time.cloudflare.com";
     dateCfg.usePSRAMBuffers = true; // optional: best effort, falls back automatically on non-PSRAM boards
     date.init(dateCfg);
 
+    // Single-server config remains valid as before.
     ESPDateConfig solarCfg{47.4979f, 19.0402f, "CET-1CEST,M3.5.0/2,M10.5.0/3", "pool.ntp.org", 15 * 60 * 1000};
     solarCfg.usePSRAMBuffers = true;
     solar.init(solarCfg);
@@ -386,7 +389,10 @@ Bind your coordinates and TZ once via `init`, then fetch today’s sun cycle (au
 
 ```cpp
 ESPDate solar;
-solar.init(ESPDateConfig{47.4979f, 19.0402f, "CET-1CEST,M3.5.0/2,M10.5.0/3", "pool.ntp.org"});
+ESPDateConfig cfg{47.4979f, 19.0402f, "CET-1CEST,M3.5.0/2,M10.5.0/3", "pool.ntp.org"};
+cfg.ntpServer2 = "time.google.com";
+cfg.ntpServer3 = "time.cloudflare.com";
+solar.init(cfg);
 
 SunCycleResult rise = solar.sunrise();                     // today, using stored config
 SunCycleResult setToday = solar.sunset();                  // today, using stored config
@@ -456,7 +462,10 @@ See `examples/sun_cycle/sun_cycle.ino` for a full sketch. Key bits:
 
 ```cpp
 ESPDate solar;
-solar.init(ESPDateConfig{47.4979f, 19.0402f, "CET-1CEST,M3.5.0/2,M10.5.0/3", "pool.ntp.org"}); // call in setup after WiFi
+ESPDateConfig cfg{47.4979f, 19.0402f, "CET-1CEST,M3.5.0/2,M10.5.0/3", "pool.ntp.org"};
+cfg.ntpServer2 = "time.google.com";
+cfg.ntpServer3 = "time.cloudflare.com";
+solar.init(cfg); // call in setup after WiFi
 DateTime today = solar.now();
 
 SunCycleResult rise = solar.sunrise(today);
@@ -472,7 +481,7 @@ if (rise.ok && set.ok) {
 ```
 
 ## Gotchas
-- ESPDate configures SNTP only when you call `init` with both `timeZone` and `ntpServer` in `ESPDateConfig` (it calls `configTzTime`). Call it after WiFi is up, or ensure the device clock is set before calling `now()`. Sunrise/sunset use either the stored TZ string (if provided) or the current process TZ—make sure it matches the coordinates you pass.
+- ESPDate configures SNTP only when you call `init` with `timeZone` and at least one configured NTP server (`ntpServer`, `ntpServer2`, or `ntpServer3`) in `ESPDateConfig` (it calls `configTzTime`). Empty server strings are ignored and compacted. Call it after WiFi is up, or ensure the device clock is set before calling `now()`. Sunrise/sunset use either the stored TZ string (if provided) or the current process TZ; make sure it matches the coordinates you pass.
 - All arithmetic and comparisons are UTC-first. Local helpers rely on the current process TZ (`setenv("TZ", ...)`, `tzset()`); make sure that matches your deployment.
 - Month/year arithmetic clamps to the last valid day of the target month (e.g., Jan 31 + 1 month → Feb 28/29; Feb 29 - 1 year → Feb 28).
 - `differenceInDays` is purely `seconds / 86400` truncated toward zero, not a calendar-boundary delta.

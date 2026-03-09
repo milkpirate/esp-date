@@ -26,9 +26,12 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.println("ESPDate NTP sync tracking example");
-  Serial.println("Connect WiFi before this sketch runs so SNTP can reach the server.");
+  Serial.println("Connect WiFi before this sketch runs so SNTP can reach the configured servers.");
 
-  date.init(ESPDateConfig{0.0f, 0.0f, "CET-1CEST,M3.5.0/2,M10.5.0/3", "pool.ntp.org", 15 * 60 * 1000});
+  ESPDateConfig cfg{0.0f, 0.0f, "CET-1CEST,M3.5.0/2,M10.5.0/3", "pool.ntp.org", 15 * 60 * 1000};
+  cfg.ntpServer2 = "time.google.com";
+  cfg.ntpServer3 = "time.cloudflare.com";
+  date.init(cfg);
   date.setNtpSyncCallback([](const DateTime &syncedAtUtc) {
     char buf[32];
     if (syncedAtUtc.localString(buf, sizeof(buf))) {

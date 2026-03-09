@@ -199,7 +199,9 @@ void ESPDate::deinit() {
   ntpSyncIntervalMs_ = 0;
   const bool usePSRAM = usePSRAMBuffers_;
   timeZone_ = DateString(DateAllocator<char>(usePSRAM));
-  ntpServer_ = DateString(DateAllocator<char>(usePSRAM));
+  for (size_t i = 0; i < kMaxNtpServers; ++i) {
+    ntpServers_[i] = DateString(DateAllocator<char>(usePSRAM));
+  }
   usePSRAMBuffers_ = false;
   initialized_ = false;
 
@@ -219,18 +221,25 @@ void ESPDate::init(const ESPDateConfig& config) {
   hasLocation_ = true;
   usePSRAMBuffers_ = config.usePSRAMBuffers;
   timeZone_ = DateString(DateAllocator<char>(usePSRAMBuffers_));
-  ntpServer_ = DateString(DateAllocator<char>(usePSRAMBuffers_));
+  for (size_t i = 0; i < kMaxNtpServers; ++i) {
+    ntpServers_[i] = DateString(DateAllocator<char>(usePSRAMBuffers_));
+  }
   ntpSyncIntervalMs_ = config.ntpSyncIntervalMs;
   hasLastNtpSync_ = false;
   lastNtpSync_ = DateTime{};
 
   const bool hasTz = config.timeZone && config.timeZone[0] != '\0';
-  const bool hasNtp = config.ntpServer && config.ntpServer[0] != '\0';
+  const char* configuredNtpServers[kMaxNtpServers] = {config.ntpServer, config.ntpServer2, config.ntpServer3};
+  size_t ntpServerCount = 0;
   if (hasTz) {
     timeZone_ = config.timeZone;
   }
-  if (hasNtp) {
-    ntpServer_ = config.ntpServer;
+  for (size_t i = 0; i < kMaxNtpServers; ++i) {
+    const char* server = configuredNtpServers[i];
+    if (!server || server[0] == '\0') {
+      continue;
+    }
+    ntpServers_[ntpServerCount++] = server;
   }
 
   if (!applyNtpConfig() && hasTz) {
@@ -247,7 +256,7 @@ void ESPDate::setNtpSyncCallback(NtpSyncCallback callback) {
   activeNtpSyncCallback_ = callback;
   activeNtpSyncCallbackCallable_ = NtpSyncCallable{};
 #if ESPDATE_HAS_SNTP_NOTIFICATION_CB
-  const bool keepTrackingEnabled = !ntpServer_.empty();
+  const bool keepTrackingEnabled = hasAnyNtpServerConfigured();
   sntp_set_time_sync_notification_cb((callback || keepTrackingEnabled) ? &ESPDate::handleSntpSync : nullptr);
 #endif
 }
@@ -259,7 +268,7 @@ void ESPDate::setNtpSyncCallbackCallable(const NtpSyncCallable& callback) {
   activeNtpSyncCallback_ = nullptr;
   activeNtpSyncCallbackCallable_ = callback;
 #if ESPDATE_HAS_SNTP_NOTIFICATION_CB
-  const bool keepTrackingEnabled = !ntpServer_.empty();
+  const bool keepTrackingEnabled = hasAnyNtpServerConfigured();
   sntp_set_time_sync_notification_cb((static_cast<bool>(callback) || keepTrackingEnabled) ? &ESPDate::handleSntpSync
                                                                                            : nullptr);
 #endif
@@ -289,9 +298,18 @@ bool ESPDate::syncNTP() {
   return applyNtpConfig();
 }
 
+bool ESPDate::hasAnyNtpServerConfigured() const {
+  for (size_t i = 0; i < kMaxNtpServers; ++i) {
+    if (!ntpServers_[i].empty()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool ESPDate::applyNtpConfig() const {
 #if ESPDATE_HAS_CONFIG_TZ_TIME
-  if (ntpServer_.empty()) {
+  if (!hasAnyNtpServerConfigured()) {
     return false;
   }
   activeNtpSyncOwner_ = const_cast<ESPDate*>(this);
@@ -310,7 +328,10 @@ bool ESPDate::applyNtpConfig() const {
 #endif
 
   const char* tz = timeZone_.empty() ? "UTC0" : timeZone_.c_str();
-  configTzTime(tz, ntpServer_.c_str(), nullptr, nullptr);
+  const char* ntpServer1 = ntpServers_[0].empty() ? nullptr : ntpServers_[0].c_str();
+  const char* ntpServer2 = ntpServers_[1].empty() ? nullptr : ntpServers_[1].c_str();
+  const char* ntpServer3 = ntpServers_[2].empty() ? nullptr : ntpServers_[2].c_str();
+  configTzTime(tz, ntpServer1, ntpServer2, ntpServer3);
   return true;
 #else
   return false;

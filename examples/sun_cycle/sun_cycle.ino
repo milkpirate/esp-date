@@ -17,7 +17,10 @@ void setup() {
   delay(250);
   Serial.println("ESPDate sun cycle example");
   Serial.println("Connect WiFi so configTzTime can sync time, or set system clock/TZ manually before running.");
-  solar.init(ESPDateConfig{47.4979f, 19.0402f, "CET-1CEST,M3.5.0/2,M10.5.0/3", "pool.ntp.org"});
+  ESPDateConfig cfg{47.4979f, 19.0402f, "CET-1CEST,M3.5.0/2,M10.5.0/3", "pool.ntp.org"};
+  cfg.ntpServer2 = "time.google.com";
+  cfg.ntpServer3 = "time.cloudflare.com";
+  solar.init(cfg);
 
   DateTime today = solar.now();
 

@@ -54,9 +54,11 @@ struct ESPDateConfig {
   float latitude = 0.0f;
   float longitude = 0.0f;
   const char* timeZone = nullptr;  // POSIX TZ string, e.g. "CET-1CEST,M3.5.0/2,M10.5.0/3"
-  const char* ntpServer = nullptr; // optional NTP server; used with timeZone to call configTzTime
+  const char* ntpServer = nullptr; // optional primary NTP server; used with timeZone to call configTzTime
   uint32_t ntpSyncIntervalMs = 0;  // optional SNTP sync interval override; 0 keeps runtime default
   bool usePSRAMBuffers = false;    // prefer PSRAM for ESPDate-owned config/state text buffers
+  const char* ntpServer2 = nullptr; // optional secondary NTP server
+  const char* ntpServer3 = nullptr; // optional tertiary NTP server
 };
 
 struct SunCycleResult {
@@ -101,7 +103,7 @@ class ESPDate {
   // Returns the last SNTP sync timestamp (UTC epoch-backed DateTime).
   // When hasLastNtpSync() is false this returns DateTime{}.
   DateTime lastNtpSync() const;
-  // Triggers an immediate NTP sync with the configured server.
+  // Triggers an immediate NTP sync with the configured server list.
   // Returns false when no NTP server is configured or SNTP runtime support is unavailable.
   bool syncNTP();
 
@@ -282,6 +284,7 @@ class ESPDate {
 #endif
   void setNtpSyncCallbackCallable(const NtpSyncCallable& callback);
   bool applyNtpConfig() const;
+  bool hasAnyNtpServerConfigured() const;
 
   SunCycleResult sunriseFromConfig(const DateTime& day) const;
   SunCycleResult sunsetFromConfig(const DateTime& day) const;
@@ -290,7 +293,8 @@ class ESPDate {
   float latitude_ = 0.0f;
   float longitude_ = 0.0f;
   DateString timeZone_;
-  DateString ntpServer_;
+  static constexpr size_t kMaxNtpServers = 3;
+  DateString ntpServers_[kMaxNtpServers];
   uint32_t ntpSyncIntervalMs_ = 0;
   bool usePSRAMBuffers_ = false;
   DateTime lastNtpSync_{};

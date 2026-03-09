@@ -7,9 +7,27 @@
 #include <functional>
 #include <string>
 
+#if defined(__has_include)
+#  if __has_include(<esp_sntp.h>) || __has_include(<esp_netif_sntp.h>)
+#    define TEST_ESPDATE_HAS_CONFIG_TZ_TIME 1
+#  else
+#    define TEST_ESPDATE_HAS_CONFIG_TZ_TIME 0
+#  endif
+#else
+#  define TEST_ESPDATE_HAS_CONFIG_TZ_TIME 0
+#endif
+
 ESPDate date;
 static const float kBudapestLat = 47.4979f;
 static const float kBudapestLon = 19.0402f;
+
+static bool expected_sync_result_with_any_ntp_server() {
+#if TEST_ESPDATE_HAS_CONFIG_TZ_TIME
+    return true;
+#else
+    return false;
+#endif
+}
 
 static void test_deinit_is_safe_before_init() {
     ESPDate monitor;
@@ -267,6 +285,34 @@ static void test_sync_ntp_requires_server_config() {
     TEST_ASSERT_FALSE(onlyTimezone.syncNTP());
 }
 
+static void test_sync_ntp_accepts_secondary_or_tertiary_server_only() {
+    ESPDate secondaryOnly;
+    ESPDateConfig secondaryCfg{0.0f, 0.0f, "UTC0", nullptr};
+    secondaryCfg.ntpServer2 = "time.google.com";
+    secondaryOnly.init(secondaryCfg);
+    TEST_ASSERT_EQUAL(expected_sync_result_with_any_ntp_server(), secondaryOnly.syncNTP());
+
+    ESPDate tertiaryOnly;
+    ESPDateConfig tertiaryCfg{0.0f, 0.0f, "UTC0", nullptr};
+    tertiaryCfg.ntpServer3 = "time.cloudflare.com";
+    tertiaryOnly.init(tertiaryCfg);
+    TEST_ASSERT_EQUAL(expected_sync_result_with_any_ntp_server(), tertiaryOnly.syncNTP());
+}
+
+static void test_sync_ntp_with_three_servers_matches_single_server_behavior() {
+    ESPDate singleServer;
+    singleServer.init(ESPDateConfig{0.0f, 0.0f, "UTC0", "pool.ntp.org"});
+    const bool singleResult = singleServer.syncNTP();
+    TEST_ASSERT_EQUAL(expected_sync_result_with_any_ntp_server(), singleResult);
+
+    ESPDate threeServers;
+    ESPDateConfig threeServerCfg{0.0f, 0.0f, "UTC0", "pool.ntp.org"};
+    threeServerCfg.ntpServer2 = "time.google.com";
+    threeServerCfg.ntpServer3 = "time.cloudflare.com";
+    threeServers.init(threeServerCfg);
+    TEST_ASSERT_EQUAL(singleResult, threeServers.syncNTP());
+}
+
 struct NtpSyncTestObserver {
     int callCount = 0;
     int64_t lastEpoch = 0;
@@ -385,6 +431,8 @@ void setup() {
     RUN_TEST(test_to_local_breakdown);
     RUN_TEST(test_moon_phase_full_and_new_moon);
     RUN_TEST(test_sync_ntp_requires_server_config);
+    RUN_TEST(test_sync_ntp_accepts_secondary_or_tertiary_server_only);
+    RUN_TEST(test_sync_ntp_with_three_servers_matches_single_server_behavior);
     RUN_TEST(test_ntp_callback_registration_supports_member_binding);
     RUN_TEST(test_ntp_sync_interval_setter_accepts_default);
     RUN_TEST(test_last_ntp_sync_defaults_to_empty);

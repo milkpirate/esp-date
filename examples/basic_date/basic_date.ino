@@ -27,7 +27,10 @@ void setup() {
   delay(200);
   Serial.println("ESPDate basic example");
   Serial.println("Connect WiFi so configTzTime can sync time, or set the system clock manually before using date.now().");
-  date.init(ESPDateConfig{0.0f, 0.0f, "CET-1CEST,M3.5.0/2,M10.5.0/3", "pool.ntp.org", 15 * 60 * 1000});
+  ESPDateConfig cfg{0.0f, 0.0f, "CET-1CEST,M3.5.0/2,M10.5.0/3", "pool.ntp.org", 15 * 60 * 1000};
+  cfg.ntpServer2 = "time.google.com";
+  cfg.ntpServer3 = "time.cloudflare.com";
+  date.init(cfg);
   date.setNtpSyncCallback(std::bind(&SyncObserver::onNtpSync, &syncObserver, std::placeholders::_1));
   date.setNtpSyncIntervalMs(10 * 60 * 1000);  // optional runtime update
   date.syncNTP();  // force an immediate refresh using configured NTP
