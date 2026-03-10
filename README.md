@@ -509,6 +509,13 @@ if (rise.ok && set.ok) {
 - You can also run `pio ci examples/basic_date --board esp32dev --project-option "build_flags=-std=gnu++17"` locally.
 - Unity smoke tests live in `test/test_esp_date`; run them on hardware with `pio test -e esp32dev` (or your board environment) to exercise arithmetic, formatting, and parsing routines.
 
+## Formatting Baseline
+
+This repository follows the firmware formatting baseline from `esptoolkit-template`:
+- `.clang-format` is the source of truth for C/C++/INO layout.
+- `.editorconfig` enforces tabs (`tab_width = 4`), LF endings, and final newline.
+- Format all tracked firmware sources with `bash scripts/format_cpp.sh`.
+
 ## License
 MIT — see [LICENSE.md](LICENSE.md).
 
